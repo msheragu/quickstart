@@ -43,52 +43,6 @@ const Endpoint = (props: Props) => {
 
   return (
     <>
-      <div className={styles.endpointContainer}>
-        <Note info className={styles.post}>
-          POST
-        </Note>
-        <div className={styles.endpointContents}>
-          <div className={styles.endpointHeader}>
-            {props.name != null && (
-              <span className={styles.endpointName}>{props.name}</span>
-            )}
-            <span className={styles.schema}>{props.schema}</span>
-          </div>
-          <div className={styles.endpointDescription}>{props.description}</div>
-        </div>
-        <div className={styles.buttonsContainer}>
-          <Button
-            small
-            centered
-            wide
-            secondary
-            className={styles.sendRequest}
-            onClick={getData}
-          >
-            {isLoading ? "Loading..." : `Send request`}
-          </Button>
-          {pdf != null && (
-            <Button
-              small
-              centered
-              wide
-              className={styles.pdf}
-              href={`data:application/pdf;base64,${pdf}`}
-              componentProps={{ download: "Asset Report.pdf" }}
-            >
-              Download PDF
-            </Button>
-          )}
-        </div>
-      </div>
-      {showTable && (
-        <Table
-          categories={props.categories}
-          data={transformedData}
-          isIdentity={props.endpoint === "identity"}
-        />
-      )}
-      {error != null && <Error error={error} />}
     </>
   );
 };

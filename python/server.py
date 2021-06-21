@@ -34,6 +34,7 @@ from flask import request
 from flask import jsonify
 from datetime import datetime
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 import plaid
 import base64
 import os
@@ -41,6 +42,11 @@ import datetime
 import json
 import time
 from dotenv import load_dotenv
+
+from pymongo import MongoClient
+from pprint import pprint
+
+
 load_dotenv()
 
 
@@ -70,6 +76,7 @@ def empty_to_none(field):
         return None
     return value
 
+
 host = plaid.Environment.Sandbox
 
 if PLAID_ENV == 'sandbox':
@@ -80,6 +87,9 @@ if PLAID_ENV == 'development':
 
 if PLAID_ENV == 'production':
     host = plaid.Environment.Production
+
+print('client_id = ', PLAID_CLIENT_ID, '\n', 'secret = ',
+      PLAID_SECRET, '\n', 'env = ', PLAID_ENV)
 
 # Parameters used for the OAuth redirect Link flow.
 #
@@ -209,6 +219,8 @@ def get_access_token():
     global access_token
     global item_id
     public_token = request.form['public_token']
+    email = request.form['email']
+    # print(email)
     try:
         exchange_request = ItemPublicTokenExchangeRequest(
             public_token=public_token)
@@ -216,9 +228,127 @@ def get_access_token():
         pretty_print_response(exchange_response.to_dict())
         access_token = exchange_response['access_token']
         item_id = exchange_response['item_id']
+
+        try:
+            hrequest = InvestmentsHoldingsGetRequest(access_token=access_token)
+            hresponse = client.investments_holdings_get(hrequest)
+            # pretty_print_response(hresponse.to_dict())
+            i = hresponse.to_dict()
+            print("abc")
+
+            start_date = (datetime.datetime.now() - relativedelta(years=(9)))
+            # start_date = (datetime.datetime.now() - timedelta(days=30))
+            end_date = datetime.datetime.now()
+            it_options = InvestmentsTransactionsGetRequestOptions()
+            it_request = InvestmentsTransactionsGetRequest(
+                access_token=access_token, start_date=start_date.date(), end_date=end_date.date(), options=it_options)
+            it_response = client.investments_transactions_get(it_request)
+            # pretty_print_response(it_response.to_dict())
+
+            it = it_response.to_dict()
+
+            security_lookup = {}
+            for item in i['securities']:
+                security_lookup[item['security_id']] = item
+
+            for item in i['holdings']:
+                item.pop('institution_price')
+                item.pop('institution_price_as_of')
+                item.pop('institution_value')
+                item.pop('unofficial_currency_code')
+
+            for item in it['investment_transactions']:
+                item.pop('account_id')
+                item.pop('cancel_transaction_id')
+                item.pop('iso_currency_code')
+                item.pop('unofficial_currency_code')
+
+            for item in i['holdings']:
+                item['Cusip'] = security_lookup[item['security_id']]['cusip']
+                item['Name'] = security_lookup[item['security_id']]['name']
+                item['Ticker'] = security_lookup[item['security_id']]['ticker_symbol']
+                item['Type'] = security_lookup[item['security_id']]['type']
+
+            user_info = {}
+
+            user_info['Accounts'] = i['accounts']
+            user_info['Investments'] = i['holdings']
+
+            for item in user_info['Investments']:
+                item['Transactions'] = []
+
+            for item in user_info['Investments']:
+                for totem in it['investment_transactions']:
+                    if item['security_id'] == totem['security_id']:
+                        item['Transactions'].append(totem)
+
+            l = user_info['Investments'].copy()
+            user_info['Investments'] = {}
+            for item in l:
+                if item['Type'] == 'cash':
+                    user_info['Balance'] = item
+                else:
+                    user_info['Investments'][item['Ticker']] = item
+            # print("Printing User Info")
+
+            # user_info['email'] = email
+
+            # user_info_pretty = json.loads(user_info)
+            print(json.dumps(user_info, indent=3))
+
+            # can also connect using this command
+            # mongo_client = MongoClient(port=27017)
+            # db = mongo_client.my_app
+            # result = db.users.insert_one(user_info)
+            # print(result)
+            # print("Added a user to the users collection")
+
+            db = MongoClient(
+                "mongodb+srv://explore-user-1:wgDjQCwKOED9HT41@cluster0.mc2ea.azure.mongodb.net/explore?retryWrites=true").explore
+            db.user_profile_v1.update_one(
+                {'email': email}, {'$set': {'robinhood': user_info}})
+
+            print("Done Printing User Info")
+
+            # return jsonify({'error': None, 'investment_transactions': it_response.to_dict()})
+            # print('def')
+
+            # it_request = InvestmentsTransactionsGetRequest(
+            #     access_token=access_token, start_date='2019-03-01', end_date='2010-04-30', options=InvestmentsTransactionsGetRequestOptions())
+            # it_response = client.investments_transactions_get(it_request)
+            # investment_transactions = response['investment_transactions']
+            # # Manipulate the count and offset parameters to paginate
+            # # transactions and retrieve all available data
+            # while len(investment_transactions) < response['total_investment_transactions']:
+            #     it_request = InvestmentsTransactionsGetRequest(
+            #         access_token=access_token, start_date='2019-03-01', end_date='2010-04-30', options=InvestmentsTransactionsGetRequestOptions(offset=len(transactions)))
+            #     it_response = client.investments_transactions_get(it_request)
+            #     pretty_print_response(it_response.to_dict())
+            #     it_response = client.investments_transactions_get(it_request)
+            #     transactions.extend(it_response['transactions'])
+
+            # print('\n', 'ghi')
+
+            # client = MongoClient('localhost:27017') # change 'localhost:27017' to your connection string
+            # # client = MongoClient(port=27017)
+            # db = client.admin
+            # db = client.my_app
+            # result = db.users.insert_one(user_info)
+
+            # serverStatusResult = db.command("serverStatus")
+            # return jsonify({'error': None, 'holdings': response.to_dict()})
+        except plaid.ApiException as e:
+            error_response = format_error(e)
+            # return jsonify(error_response)]
+            print(jsonify(error_response))
+
         return jsonify(exchange_response.to_dict())
     except plaid.ApiException as e:
         return json.loads(e.body)
+
+    # return redirect("http://192.168.0.30:8080/test", code=302)
+    print("out of all try")
+    return "<script>window.onload = window.close();</script>"
 
 
 # Retrieve ACH or ETF account numbers for an Item
@@ -228,12 +358,12 @@ def get_access_token():
 @app.route('/api/auth', methods=['GET'])
 def get_auth():
     try:
-       request = AuthGetRequest(
+        request = AuthGetRequest(
             access_token=access_token
         )
-       response = client.auth_get(request)
-       pretty_print_response(response.to_dict())
-       return jsonify(response.to_dict())
+        response = client.auth_get(request)
+        pretty_print_response(response.to_dict())
+        return jsonify(response.to_dict())
     except plaid.ApiException as e:
         error_response = format_error(e)
         return jsonify(error_response)
@@ -476,8 +606,10 @@ def item():
         error_response = format_error(e)
         return jsonify(error_response)
 
+
 def pretty_print_response(response):
-  print(json.dumps(response, indent=2, sort_keys=True))
+    print(json.dumps(response, indent=2, sort_keys=True))
+
 
 def format_error(e):
     response = json.loads(e.body)

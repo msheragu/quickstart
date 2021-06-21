@@ -4,6 +4,14 @@ import Button from "plaid-threads/Button";
 
 import Context from "../../Context";
 
+
+// var form = {
+//   `public_token=${public_token}`,
+//   'email' : 'abc@abc.com'
+// };
+
+// var formData = querystring.stringify(form);
+
 const Link = () => {
   const { linkToken, dispatch } = useContext(Context);
 
@@ -16,7 +24,7 @@ const Link = () => {
           headers: {
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
           },
-          body: `public_token=${public_token}`,
+          body: `public_token=${public_token}&email=abc@abc.com`,
         });
         if (!response.ok) {
           dispatch({
@@ -69,7 +77,7 @@ const Link = () => {
 
   return (
     <Button type="button" large onClick={() => open()} disabled={!ready}>
-      Launch Link
+      Link Account
     </Button>
   );
 };
