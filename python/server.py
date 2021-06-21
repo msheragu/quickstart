@@ -303,8 +303,7 @@ def get_access_token():
             # print(result)
             # print("Added a user to the users collection")
 
-            db = MongoClient(
-                "mongodb+srv://explore-user-1:wgDjQCwKOED9HT41@cluster0.mc2ea.azure.mongodb.net/explore?retryWrites=true").explore
+            db = MongoClient(random).explore
             db.user_profile_v1.update_one(
                 {'email': email}, {'$set': {'robinhood': user_info}})
 
